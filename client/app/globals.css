@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family:
+    "Satoshi",
+    "Avenir Next",
+    "Segoe UI",
+    sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(124, 92, 255, 0.22), transparent 30%),
+    radial-gradient(circle at top right, rgba(255, 107, 139, 0.2), transparent 28%),
+    radial-gradient(circle at bottom, rgba(85, 214, 190, 0.14), transparent 35%),
+    #090b11;
+  color: #f5f7ff;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.grain {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: radial-gradient(circle at center, black 50%, transparent 95%);
+  opacity: 0.18;
+}
+
+.panel {
+  @apply rounded-[28px] border border-white/10 bg-white/5 shadow-glow backdrop-blur-xl;
+}
+
+.pill {
+  @apply inline-flex items-center rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-medium text-white/70;
+}
+
+.field {
+  @apply w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none transition placeholder:text-white/35 focus:border-white/25 focus:bg-white/10;
+}
+
+.primary-button {
+  @apply inline-flex items-center justify-center rounded-2xl bg-white px-5 py-3 font-semibold text-black transition hover:scale-[1.01] hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+.ghost-button {
+  @apply inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-5 py-3 font-semibold text-white transition hover:bg-white/10;
+}
