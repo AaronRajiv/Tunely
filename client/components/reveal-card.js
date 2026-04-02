@@ -1,4 +1,6 @@
-export function RevealCard({ reveal }) {
+import clsx from "clsx";
+
+export function RevealCard({ reveal, selectedOptionId }) {
   if (!reveal) {
     return null;
   }
@@ -19,6 +21,29 @@ export function RevealCard({ reveal }) {
             <p className="text-sm uppercase tracking-[0.24em] text-white/40">Answer revealed</p>
             <h2 className="mt-3 text-4xl font-semibold tracking-[-0.03em]">{reveal.song.title}</h2>
             <p className="mt-2 text-lg text-white/65">{reveal.song.artist}</p>
+          </div>
+
+          <div className="mt-6 grid gap-3">
+            {reveal.options?.map((option) => {
+              const isCorrect = option.id === reveal.correctOptionId;
+              const isWrongSelection = selectedOptionId === option.id && option.id !== reveal.correctOptionId;
+
+              return (
+                <div
+                  key={option.id}
+                  className={clsx(
+                    "rounded-2xl border px-4 py-3 text-sm transition",
+                    isCorrect
+                      ? "border-emerald-400/40 bg-emerald-400/18 text-emerald-50"
+                      : isWrongSelection
+                        ? "border-rose-400/35 bg-rose-400/16 text-rose-50"
+                        : "border-white/10 bg-white/5 text-white/60"
+                  )}
+                >
+                  {option.label}
+                </div>
+              );
+            })}
           </div>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">

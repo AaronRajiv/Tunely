@@ -72,3 +72,25 @@ select {
 .ghost-button {
   @apply inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-5 py-3 font-semibold text-white transition hover:bg-white/10;
 }
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes pop {
+  0%,
+  100% {
+    transform: scale(0.9) rotate(0deg);
+    opacity: 0.35;
+  }
+  50% {
+    transform: scale(1.12) rotate(10deg);
+    opacity: 1;
+  }
+}

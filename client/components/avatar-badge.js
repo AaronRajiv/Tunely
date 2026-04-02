@@ -7,7 +7,7 @@ export function AvatarBadge({ seed = "guest", name = "Guest", size = "md" }) {
   const hueA = hash % 360;
   const hueB = (hash * 1.31) % 360;
   const hueC = (hash * 2.07) % 360;
-  const dimensions = size === "lg" ? "h-20 w-20 text-2xl rounded-[28px]" : "h-12 w-12 text-sm rounded-2xl";
+  const dimensions = size === "lg" ? "h-16 w-16 text-xl rounded-full" : "h-10 w-10 text-xs rounded-full";
   const initials = name
     .split(" ")
     .filter(Boolean)
@@ -22,7 +22,7 @@ export function AvatarBadge({ seed = "guest", name = "Guest", size = "md" }) {
         background: `radial-gradient(circle at 25% 20%, hsla(${hueA}, 96%, 72%, 0.95), transparent 36%), linear-gradient(135deg, hsla(${hueB}, 74%, 56%, 0.96), hsla(${hueC}, 72%, 34%, 0.92))`
       }}
     >
-      <div className="absolute inset-[10%] rounded-[inherit] border border-white/10 opacity-70" />
+      <div className="absolute inset-[10%] rounded-full border border-white/10 opacity-70" />
       <div
         className="absolute -right-3 top-2 h-8 w-8 rounded-full blur-md"
         style={{ background: `hsla(${hueA}, 98%, 82%, 0.75)` }}

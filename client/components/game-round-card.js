@@ -16,6 +16,7 @@ export function GameRoundCard({
 }) {
   const audioRef = useRef(null);
   const stopRef = useRef(null);
+  const fadeRef = useRef(null);
   const [playbackState, setPlaybackState] = useState("waiting");
   const [introCountdown, setIntroCountdown] = useState(0);
 
@@ -50,19 +51,45 @@ export function GameRoundCard({
       );
 
       stopRef.current = setTimeout(() => {
-        audio.pause();
-        audio.currentTime = 0;
-        setPlaybackState("stopped");
+        const steps = 8;
+        const initialVolume = audio.volume;
+        let currentStep = 0;
+
+        fadeRef.current = window.setInterval(() => {
+          currentStep += 1;
+          audio.volume = Math.max(0, initialVolume * (1 - currentStep / steps));
+
+          if (currentStep >= steps) {
+            clearInterval(fadeRef.current);
+            audio.pause();
+            audio.currentTime = 0;
+            audio.volume = isMuted ? 0 : volume;
+            setPlaybackState("stopped");
+          }
+        }, 70);
       }, Math.max(0, round.endAt - Date.now()));
     }, delay);
 
     return () => {
       clearTimeout(startTimer);
       clearTimeout(stopRef.current);
+      clearInterval(fadeRef.current);
       clearInterval(countdownInterval);
       if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
+        const audio = audioRef.current;
+        const initialVolume = audio.volume;
+        let currentStep = 0;
+
+        fadeRef.current = window.setInterval(() => {
+          currentStep += 1;
+          audio.volume = Math.max(0, initialVolume * (1 - currentStep / 5));
+
+          if (currentStep >= 5) {
+            clearInterval(fadeRef.current);
+            audio.pause();
+            audio.currentTime = 0;
+          }
+        }, 45);
       }
     };
   }, [round, isMuted, volume]);

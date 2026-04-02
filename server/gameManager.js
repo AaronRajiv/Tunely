@@ -387,6 +387,7 @@ export function revealRound(code) {
     roundNumber: room.game.currentRound,
     totalRounds: room.game.totalRounds,
     song: round.song,
+    options: round.options,
     correctOptionId: round.song.id,
     leaderboard
   };
@@ -398,6 +399,23 @@ export function revealRound(code) {
     leaderboard,
     gameEnded: room.game.currentRound >= room.game.totalRounds
   };
+}
+
+export function haveAllConnectedPlayersAnswered(code) {
+  const room = ensureRoom(code);
+  const round = room.game.currentRoundData;
+
+  if (!round) {
+    return false;
+  }
+
+  const connectedPlayers = room.players.filter((player) => player.connected);
+
+  if (!connectedPlayers.length) {
+    return false;
+  }
+
+  return connectedPlayers.every((player) => round.answers.has(player.id));
 }
 
 export function endGame(code) {

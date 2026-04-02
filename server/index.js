@@ -11,6 +11,7 @@ import {
   getRoom,
   getRoomSnapshot,
   handleDisconnect,
+  haveAllConnectedPlayersAnswered,
   joinRoom,
   nextRound,
   removeEmptyRooms,
@@ -194,6 +195,33 @@ function emitRoomUpdate(roomCode) {
   io.to(roomCode).emit("player_list_updated", getRoomSnapshot(roomCode));
 }
 
+function concludeRound(roomCode, timers) {
+  if (timers?.timerInterval) {
+    clearInterval(timers.timerInterval);
+  }
+  if (timers?.roundTimeout) {
+    clearTimeout(timers.roundTimeout);
+  }
+
+  const result = revealRound(roomCode);
+
+  io.to(roomCode).emit("reveal_answer", result.reveal);
+  io.to(roomCode).emit("leaderboard_update", result.leaderboard);
+
+  if (result.gameEnded) {
+    const finishedRoom = endGame(roomCode);
+    io.to(roomCode).emit("game_ended", finishedRoom);
+    clearRoomTimers(roomCode);
+    return;
+  }
+
+  timers.nextRoundTimeout = setTimeout(() => {
+    scheduleRound(roomCode);
+  }, REVEAL_DURATION_MS);
+
+  roomTimers.set(roomCode, timers);
+}
+
 function scheduleRound(roomCode) {
   clearRoomTimers(roomCode);
 
@@ -220,23 +248,7 @@ function scheduleRound(roomCode) {
     }, 1000);
 
     timers.roundTimeout = setTimeout(() => {
-      clearInterval(timers.timerInterval);
-
-      const result = revealRound(roomCode);
-
-      io.to(roomCode).emit("reveal_answer", result.reveal);
-      io.to(roomCode).emit("leaderboard_update", result.leaderboard);
-
-      if (result.gameEnded) {
-        const finishedRoom = endGame(roomCode);
-        io.to(roomCode).emit("game_ended", finishedRoom);
-        clearRoomTimers(roomCode);
-        return;
-      }
-
-      timers.nextRoundTimeout = setTimeout(() => {
-        scheduleRound(roomCode);
-      }, REVEAL_DURATION_MS);
+      concludeRound(roomCode, timers);
     }, Math.max(0, round.endAt - Date.now()));
 
     roomTimers.set(roomCode, timers);
@@ -347,6 +359,14 @@ io.on("connection", (socket) => {
   socket.on("submit_answer", ({ roomCode, playerId, optionId }) => {
     try {
       submitAnswer({ code: roomCode, playerId, optionId });
+
+      if (haveAllConnectedPlayersAnswered(roomCode)) {
+        const timers = roomTimers.get(roomCode);
+
+        if (timers) {
+          concludeRound(roomCode, timers);
+        }
+      }
     } catch (error) {
       socket.emit("error_message", { message: error.message });
     }

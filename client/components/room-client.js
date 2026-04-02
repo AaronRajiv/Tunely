@@ -15,7 +15,6 @@ import {
   setStoredName
 } from "@/lib/storage";
 import { HostControls } from "./host-controls";
-import { PlayerList } from "./player-list";
 import { GameRoundCard } from "./game-round-card";
 import { RevealCard } from "./reveal-card";
 import { FinalLeaderboard } from "./final-leaderboard";
@@ -117,7 +116,6 @@ export function RoomClient({ code }) {
       setReveal(payload);
       setLeaderboard(payload.leaderboard || []);
       setRound(null);
-      setSelectedOptionId("");
     };
 
     const handleLeaderboard = (nextLeaderboard) => {
@@ -283,12 +281,10 @@ export function RoomClient({ code }) {
 
         <section className="grid gap-6 xl:grid-cols-[360px_1fr]">
           <div className="space-y-6">
-            <PlayerList players={room.players} currentPlayerId={currentPlayerId} />
-
             <div className="panel overflow-hidden p-5">
               <div className="mb-5 flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Leaderboard</h3>
-                <span className="text-sm text-white/45">Live scoring</span>
+                <h3 className="text-lg font-semibold">Room leaderboard</h3>
+                <span className="text-sm text-white/45">{room.players.length} players</span>
               </div>
 
               <div className="space-y-3">
@@ -344,8 +340,7 @@ export function RoomClient({ code }) {
               />
             ) : null}
 
-            {room.phase === "reveal" ? <RevealCard reveal={reveal} /> : null}
-
+            {room.phase === "reveal" ? <RevealCard reveal={reveal} selectedOptionId={selectedOptionId} /> : null}
             {room.phase === "finished" ? <FinalLeaderboard leaderboard={leaderboard} /> : null}
 
             <div className="panel p-6">
