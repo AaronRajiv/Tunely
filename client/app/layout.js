@@ -1,8 +1,8 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "Song Guess Party",
-  description: "Real-time multiplayer song guessing party with Spotify playlist rooms."
+  title: "Tunely",
+  description: "Real-time multiplayer music guessing rooms powered by Spotify imports and Apple previews."
 };
 
 export default function RootLayout({ children }) {

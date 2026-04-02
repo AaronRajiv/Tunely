@@ -1,4 +1,4 @@
-# Song Guess Party
+# Tunely
 
 Real-time multiplayer music guessing game built with Next.js, Express, Socket.IO, and Spotify playlist import.
 

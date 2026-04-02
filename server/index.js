@@ -370,5 +370,5 @@ io.on("connection", (socket) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Song Guess Party server running on http://localhost:${PORT}`);
+  console.log(`Tunely server running on http://localhost:${PORT}`);
 });

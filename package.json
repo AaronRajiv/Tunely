@@ -1,5 +1,5 @@
 {
-  "name": "song-guess-party",
+  "name": "tunely",
   "private": true,
   "workspaces": [
     "client",
