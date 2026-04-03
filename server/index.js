@@ -13,6 +13,7 @@ import {
   handleDisconnect,
   haveAllConnectedPlayersAnswered,
   joinRoom,
+  leaveRoom,
   nextRound,
   removeEmptyRooms,
   revealRound,
@@ -21,15 +22,18 @@ import {
   setSpotifyAuth,
   startGame,
   submitAnswer,
+  updateReady,
   updateAvatar,
   updateName,
   updateSettings
 } from "./gameManager.js";
 import {
+  fetchDefaultModeTracks,
+  importAppleCuratedPlaylist,
   createSpotifyAuthUrl,
   exchangeCodeForTokens,
-  fetchDefaultModeTracks,
-  importSpotifyPlaylist
+  importSpotifyPlaylist,
+  listAppleCuratedPlaylists
 } from "./spotifyService.js";
 
 const app = express();
@@ -42,7 +46,7 @@ const io = new Server(server, {
 });
 
 const PORT = Number(process.env.PORT || 4000);
-const REVEAL_DURATION_MS = 5000;
+const REVEAL_DURATION_MS = 5500;
 const roomTimers = new Map();
 const spotifyAuthStates = new Map();
 
@@ -55,6 +59,13 @@ app.use(express.json());
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
+});
+
+app.get("/api/apple/curated", (_req, res) => {
+  res.json({
+    success: true,
+    playlists: listAppleCuratedPlaylists()
+  });
 });
 
 app.get("/auth/spotify/start", (req, res) => {
@@ -131,9 +142,9 @@ app.get("/auth/spotify/callback", async (req, res) => {
   }
 });
 
-app.post("/api/spotify/import", async (req, res) => {
+app.post("/api/library/import", async (req, res) => {
   try {
-    const { roomCode, playerId, playlistUrl } = req.body;
+    const { roomCode, playerId, playlistUrl, source } = req.body;
     const room = getRoom(roomCode);
 
     if (!room) {
@@ -144,23 +155,33 @@ app.post("/api/spotify/import", async (req, res) => {
       throw new Error("Only the host can import a playlist.");
     }
 
-    const spotifyTokens = getSpotifyAuth(playerId);
+    let imported;
 
-    if (!spotifyTokens) {
-      throw new Error("Connect Spotify as the host before importing a playlist.");
+    if (source === "apple_curated") {
+      imported = await importAppleCuratedPlaylist(playlistUrl);
+    } else {
+      const spotifyTokens = getSpotifyAuth(playerId);
+
+      if (!spotifyTokens) {
+        throw new Error("Connect Spotify as the host before importing a playlist.");
+      }
+
+      imported = await importSpotifyPlaylist(playlistUrl, spotifyTokens);
+      setSpotifyAuth({
+        playerId,
+        tokens: imported.tokens
+      });
     }
 
-    const imported = await importSpotifyPlaylist(playlistUrl, spotifyTokens);
-    setSpotifyAuth({
-      playerId,
-      tokens: imported.tokens
-    });
     const updatedRoom = setPlaylistSongs({
       code: roomCode,
       playerId,
       songs: imported.songs,
       playlistUrl,
-      playlistName: imported.playlistName
+      playlistName: imported.playlistName,
+      playlistCover: imported.playlistCover || "",
+      sourceTrackCount: imported.sourceTrackCount || imported.songs.length,
+      gameMode: imported.source === "apple_curated" ? "apple_curated" : "spotify_playlist"
     });
 
     io.to(roomCode).emit("settings_updated", getRoomSnapshot(updatedRoom.code));
@@ -168,7 +189,10 @@ app.post("/api/spotify/import", async (req, res) => {
     res.json({
       success: true,
       playlistName: imported.playlistName,
-      songsImported: updatedRoom.songPool.length
+      songsImported: updatedRoom.songPool.length,
+      sourceTrackCount: imported.sourceTrackCount || imported.songs.length,
+      playlistCover: imported.playlistCover || "",
+      source: imported.source || source || "spotify"
     });
   } catch (error) {
     res.status(400).json({
@@ -317,10 +341,30 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("update_ready", ({ roomCode, playerId, ready }) => {
+    try {
+      updateReady({ code: roomCode, playerId, ready });
+      emitRoomUpdate(roomCode);
+    } catch (error) {
+      socket.emit("error_message", { message: error.message });
+    }
+  });
+
   socket.on("update_settings", ({ roomCode, playerId, settings }) => {
     try {
       updateSettings({ code: roomCode, playerId, settings });
       io.to(roomCode).emit("settings_updated", getRoomSnapshot(roomCode));
+    } catch (error) {
+      socket.emit("error_message", { message: error.message });
+    }
+  });
+
+  socket.on("leave_room", ({ roomCode, playerId }) => {
+    try {
+      socket.leave(roomCode);
+      leaveRoom({ code: roomCode, playerId, socketId: socket.id });
+      emitRoomUpdate(roomCode);
+      removeEmptyRooms();
     } catch (error) {
       socket.emit("error_message", { message: error.message });
     }
@@ -338,7 +382,7 @@ io.on("connection", (socket) => {
         throw new Error("Only the host can start the game.");
       }
 
-      if (room.settings.gameMode !== "spotify_playlist") {
+      if (room.settings.gameMode === "default_mode") {
         const songs = await fetchDefaultModeTracks(room.settings.genre);
         setModeSongs({
           code: roomCode,
@@ -359,6 +403,7 @@ io.on("connection", (socket) => {
   socket.on("submit_answer", ({ roomCode, playerId, optionId }) => {
     try {
       submitAnswer({ code: roomCode, playerId, optionId });
+      emitRoomUpdate(roomCode);
 
       if (haveAllConnectedPlayersAnswered(roomCode)) {
         const timers = roomTimers.get(roomCode);

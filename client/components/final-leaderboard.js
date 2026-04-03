@@ -1,6 +1,28 @@
 import { AvatarBadge } from "./avatar-badge";
 
-export function FinalLeaderboard({ leaderboard }) {
+function getBadges(player, awards) {
+  if (!player) {
+    return [];
+  }
+
+  const badges = [];
+
+  if (awards?.fastest === player.id) {
+    badges.push("Fastest hands");
+  }
+
+  if (awards?.accuracy === player.id) {
+    badges.push("Most accurate");
+  }
+
+  if (awards?.streak === player.id) {
+    badges.push("Best streak");
+  }
+
+  return badges;
+}
+
+export function FinalLeaderboard({ leaderboard, awards }) {
   const first = leaderboard[0];
   const second = leaderboard[1];
   const third = leaderboard[2];
@@ -23,6 +45,15 @@ export function FinalLeaderboard({ leaderboard }) {
                 <p className="text-sm text-white/45">P2</p>
                 <p className="mt-3 text-2xl font-semibold">{second.name}</p>
                 <p className="mt-2 text-white/55">{second.score} pts</p>
+                {getBadges(second, awards).length ? (
+                  <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                    {getBadges(second, awards).map((badge) => (
+                      <span key={`${second.id}-${badge}`} className="pill">
+                        {badge}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
               <div className="h-28 w-full rounded-b-[28px] bg-gradient-to-b from-slate-300/30 to-slate-500/20" />
             </div>
@@ -43,6 +74,15 @@ export function FinalLeaderboard({ leaderboard }) {
                 <p className="text-sm font-medium tracking-[0.24em] text-gold">P1</p>
                 <p className="mt-3 text-3xl font-semibold text-white">{first.name}</p>
                 <p className="mt-2 text-white/60">{first.score} pts</p>
+                {getBadges(first, awards).length ? (
+                  <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                    {getBadges(first, awards).map((badge) => (
+                      <span key={`${first.id}-${badge}`} className="pill">
+                        {badge}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
               <div className="h-36 w-full rounded-b-[30px] bg-gradient-to-b from-gold/70 to-gold/30" />
             </div>
@@ -59,6 +99,15 @@ export function FinalLeaderboard({ leaderboard }) {
                 <p className="text-sm text-white/45">P3</p>
                 <p className="mt-3 text-2xl font-semibold">{third.name}</p>
                 <p className="mt-2 text-white/55">{third.score} pts</p>
+                {getBadges(third, awards).length ? (
+                  <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                    {getBadges(third, awards).map((badge) => (
+                      <span key={`${third.id}-${badge}`} className="pill">
+                        {badge}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
               <div className="h-24 w-full rounded-b-[28px] bg-gradient-to-b from-amber-700/35 to-amber-900/20" />
             </div>
@@ -79,9 +128,20 @@ export function FinalLeaderboard({ leaderboard }) {
               >
                 <div className="flex items-center gap-3">
                   <AvatarBadge seed={player.avatarSeed || player.id} name={player.name} />
-                  <p className="font-medium text-white">
-                    #{index + 4} {player.name}
-                  </p>
+                  <div>
+                    <p className="font-medium text-white">
+                      #{index + 4} {player.name}
+                    </p>
+                    {getBadges(player, awards).length ? (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {getBadges(player, awards).map((badge) => (
+                          <span key={`${player.id}-${badge}`} className="pill">
+                            {badge}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
                 <p className="text-white/65">{player.score}</p>
               </div>

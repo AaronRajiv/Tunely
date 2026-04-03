@@ -94,3 +94,35 @@ select {
     opacity: 1;
   }
 }
+
+@keyframes equalize {
+  0%,
+  100% {
+    transform: scaleY(0.5);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scaleY(1.1);
+    opacity: 1;
+  }
+}
+
+@keyframes flame {
+  0%,
+  100% {
+    transform: translateY(0) scale(0.96) rotate(-5deg);
+    filter: saturate(1);
+  }
+  25% {
+    transform: translateY(-1px) scale(1.06) rotate(3deg);
+    filter: saturate(1.15);
+  }
+  50% {
+    transform: translateY(-2px) scale(1.12) rotate(-2deg);
+    filter: saturate(1.28);
+  }
+  75% {
+    transform: translateY(-1px) scale(1.02) rotate(4deg);
+    filter: saturate(1.1);
+  }
+}

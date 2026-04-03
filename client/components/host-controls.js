@@ -46,7 +46,7 @@ export function HostControls({ room, playerId, socket, onImported }) {
     setImportState({ loading: true, message: "", error: "" });
 
     try {
-      const response = await fetch(`${SERVER_URL}/api/spotify/import`, {
+      const response = await fetch(`${SERVER_URL}/api/library/import`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -54,7 +54,8 @@ export function HostControls({ room, playerId, socket, onImported }) {
         body: JSON.stringify({
           roomCode: room.code,
           playerId,
-          playlistUrl
+          playlistUrl,
+          source: "spotify"
         })
       });
 
@@ -66,13 +67,14 @@ export function HostControls({ room, playerId, socket, onImported }) {
 
       setImportState({
         loading: false,
-        message: `${data.playlistName} imported with ${data.songsImported} playable tracks.`,
+        message: `${data.playlistName} imported with ${data.songsImported} playable tracks from ${data.sourceTrackCount} source songs.`,
         error: ""
       });
       setPlaylistHistory(
         savePlaylistHistory({
           name: data.playlistName,
-          url: playlistUrl
+          url: playlistUrl,
+          source: "spotify"
         })
       );
 
@@ -186,9 +188,12 @@ export function HostControls({ room, playerId, socket, onImported }) {
               <div className="mt-4 flex flex-wrap gap-2">
                 {playlistHistory.map((entry) => (
                   <button
-                    key={entry.url}
+                    key={`${entry.source || "spotify"}-${entry.url}`}
                     className="rounded-full border border-white/10 bg-white/8 px-3 py-1 text-sm text-white/70 transition hover:bg-white/14"
-                    onClick={() => setPlaylistUrl(entry.url)}
+                    onClick={() => {
+                      setPlaylistUrl(entry.url);
+                      emitSettings({ gameMode: "spotify_playlist" });
+                    }}
                     type="button"
                   >
                     {entry.name}
@@ -246,10 +251,19 @@ export function HostControls({ room, playerId, socket, onImported }) {
         <button
           className="primary-button mt-2"
           onClick={() => socket.emit("start_game", { roomCode: room.code, playerId })}
-          disabled={(isPlaylistMode && room.songPoolSize < 4) || (isPlaylistMode && !spotifyConnected)}
+          disabled={
+            (isPlaylistMode && room.songPoolSize < 4) ||
+            !room.answerProgress?.allReady ||
+            (isPlaylistMode && !spotifyConnected)
+          }
         >
           Start game
         </button>
+        {!room.answerProgress?.allReady ? (
+          <p className="text-sm text-white/50">
+            Everyone in the room needs to hit ready before the host can start.
+          </p>
+        ) : null}
       </div>
     </div>
   );

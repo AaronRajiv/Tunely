@@ -12,6 +12,12 @@ export function HomeClient() {
   const [roomCode, setRoomCode] = useState("");
   const [error, setError] = useState("");
   const [isBusy, setIsBusy] = useState(false);
+  const patchNotes = [
+    "Live streak tracking now glows right inside the room leaderboard.",
+    "Players can ready up before the host starts, while the host stays auto-ready.",
+    "Round flow now has better waiting states, score bursts, and smoother reveals.",
+    "Playlist imports keep recent history and show matched track counts more clearly."
+  ];
 
   useEffect(() => {
     setName(getStoredName() || `Guest ${Math.floor(Math.random() * 90 + 10)}`);
@@ -159,6 +165,28 @@ export function HomeClient() {
                 <p className="mt-1">Leaderboard updates</p>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section className="panel p-6 md:p-8">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm uppercase tracking-[0.24em] text-white/45">Patch notes</p>
+              <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">Latest updates in Tunely</h2>
+            </div>
+            <span className="pill">April 2026 build</span>
+          </div>
+
+          <div className="mt-6 grid gap-3 md:grid-cols-2">
+            {patchNotes.map((note, index) => (
+              <div
+                key={note}
+                className="rounded-[24px] border border-white/10 bg-black/20 px-5 py-4 text-white/75"
+              >
+                <p className="text-sm uppercase tracking-[0.24em] text-white/35">{`Update 0${index + 1}`}</p>
+                <p className="mt-3 text-base leading-7">{note}</p>
+              </div>
+            ))}
           </div>
         </section>
       </div>

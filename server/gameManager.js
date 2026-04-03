@@ -1,4 +1,6 @@
 const ROOM_CODE_LENGTH = 6;
+const HOST_RECONNECT_GRACE_MS = 3 * 60 * 1000;
+const EMPTY_ROOM_TTL_MS = 10 * 60 * 1000;
 
 const DEFAULT_SETTINGS = {
   gameMode: "spotify_playlist",
@@ -8,6 +10,8 @@ const DEFAULT_SETTINGS = {
   genre: "Top Hits",
   playlistUrl: "",
   playlistName: "",
+  playlistCover: "",
+  sourceTrackCount: 0,
   importedCount: 0
 };
 
@@ -65,12 +69,27 @@ function createPlayer({ socketId, name, playerId, isHost = false }) {
     avatarSeed: randomId("avatar"),
     isHost,
     score: 0,
+    ready: isHost,
     connected: true,
-    lastAnswerAt: null
+    lastAnswerAt: null,
+    stats: {
+      answersSubmitted: 0,
+      correctAnswers: 0,
+      fastestAnswers: 0,
+      totalResponseMs: 0,
+      currentStreak: 0,
+      bestStreak: 0
+    }
   };
 }
 
 function serializeRoom(room) {
+  const answeredIds = room.game.currentRoundData
+    ? new Set(room.game.currentRoundData.answers.keys())
+    : new Set();
+  const connectedPlayers = room.players.filter((player) => player.connected);
+  const host = room.players.find((player) => player.id === room.hostId);
+
   return {
     code: room.code,
     hostId: room.hostId,
@@ -83,22 +102,43 @@ function serializeRoom(room) {
         avatarSeed: player.avatarSeed,
         score: player.score,
         isHost: player.isHost,
-        connected: player.connected
+        connected: player.connected,
+        ready: player.ready,
+        hasAnswered: answeredIds.has(player.id)
       }))
       .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name)),
     songPoolSize: room.songPool.length,
     spotifyConnected: spotifyHostTokens.has(room.hostId),
     currentRound: room.game.currentRound,
     totalRounds: room.game.totalRounds,
+    hostConnected: Boolean(host?.connected),
+    hostReconnectGraceRemainingMs:
+      host && !host.connected && room.hostReconnectGraceUntil
+        ? Math.max(0, room.hostReconnectGraceUntil - Date.now())
+        : 0,
+    answerProgress: {
+      connectedCount: connectedPlayers.length,
+      answeredCount: connectedPlayers.filter((player) => answeredIds.has(player.id)).length,
+      readyCount: connectedPlayers.filter((player) => player.ready).length,
+      waitingPlayerIds: connectedPlayers
+        .filter((player) => !answeredIds.has(player.id))
+        .map((player) => player.id),
+      allReady: connectedPlayers.every((player) => player.ready)
+    },
     leaderboard: room.players
       .map((player) => ({
         id: player.id,
         name: player.name,
         avatarSeed: player.avatarSeed,
         score: player.score,
-        isHost: player.isHost
+        isHost: player.isHost,
+        connected: player.connected,
+        ready: player.ready,
+        hasAnswered: answeredIds.has(player.id),
+        stats: { ...player.stats }
       }))
-      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name)),
+    awards: room.phase === "finished" ? buildPlayerAwards(room.players) : null
   };
 }
 
@@ -147,7 +187,7 @@ function createRoundPayload(room, roundSong) {
     }))
   ]);
 
-  const startAt = Date.now() + 1200;
+  const startAt = Date.now() + 5000;
   const endAt = startAt + room.settings.roundDuration * 1000;
 
   room.phase = "playing";
@@ -179,6 +219,38 @@ function createRoundPayload(room, roundSong) {
   };
 }
 
+function buildPlayerAwards(players) {
+  if (!players.length) {
+    return {};
+  }
+
+  const ranked = [...players];
+  const byMetric = (metric, fallback = 0) =>
+    ranked.reduce((best, player) => {
+      const value = metric(player);
+
+      if (!best || value > best.value) {
+        return { id: player.id, value: value ?? fallback };
+      }
+
+      return best;
+    }, null);
+
+  const accuracyWinner = byMetric((player) =>
+    player.stats.answersSubmitted
+      ? player.stats.correctAnswers / player.stats.answersSubmitted
+      : 0
+  );
+  const fastestWinner = byMetric((player) => player.stats.fastestAnswers);
+  const streakWinner = byMetric((player) => player.stats.bestStreak);
+
+  return {
+    accuracy: accuracyWinner?.value ? accuracyWinner.id : "",
+    fastest: fastestWinner?.value ? fastestWinner.id : "",
+    streak: streakWinner?.value ? streakWinner.id : ""
+  };
+}
+
 function selectRoundSong(room) {
   const availableSongs = room.songPool.filter((song) => !room.game.usedSongIds.has(song.id));
   const source = availableSongs.length ? availableSongs : room.songPool;
@@ -197,6 +269,8 @@ export function createRoom({ socketId, name, playerId, avatarSeed }) {
     players: [host],
     settings: { ...DEFAULT_SETTINGS },
     songPool: [],
+    emptySince: null,
+    hostReconnectGraceUntil: 0,
     game: {
       currentRound: 0,
       totalRounds: DEFAULT_SETTINGS.totalRounds,
@@ -219,11 +293,17 @@ export function joinRoom({ code, socketId, name, playerId, avatarSeed }) {
     player.connected = true;
     player.name = sanitizeName(name || player.name);
     player.avatarSeed = avatarSeed || player.avatarSeed;
+    if (player.isHost) {
+      player.ready = true;
+      room.hostReconnectGraceUntil = 0;
+    }
   } else {
     player = createPlayer({ socketId, name, playerId, isHost: false });
     player.avatarSeed = avatarSeed || player.avatarSeed;
     room.players.push(player);
   }
+
+  room.emptySince = null;
 
   return { room, player };
 }
@@ -246,31 +326,61 @@ export function updateAvatar({ code, playerId, avatarSeed }) {
   return room;
 }
 
+export function updateReady({ code, playerId, ready }) {
+  const room = ensureRoom(code);
+  const player = getPlayer(room, playerId);
+
+  player.ready = player.isHost ? true : Boolean(ready);
+
+  return room;
+}
+
 export function updateSettings({ code, playerId, settings }) {
   const room = ensureRoom(code);
   ensureHost(room, playerId);
 
+  const mode =
+    settings.gameMode !== undefined ? settings.gameMode : room.settings.gameMode;
   room.settings = {
     ...room.settings,
     ...settings,
     roundDuration: Number(settings.roundDuration ?? room.settings.roundDuration),
-    totalRounds: Number(settings.totalRounds ?? room.settings.totalRounds)
+    totalRounds: Number(settings.totalRounds ?? room.settings.totalRounds),
+    ...(mode === "default_mode"
+      ? {
+          playlistUrl: "",
+          playlistName: "",
+          playlistCover: "",
+          sourceTrackCount: 0
+        }
+      : {})
   };
   room.game.totalRounds = room.settings.totalRounds;
 
   return room;
 }
 
-export function setPlaylistSongs({ code, playerId, songs, playlistUrl, playlistName }) {
+export function setPlaylistSongs({
+  code,
+  playerId,
+  songs,
+  playlistUrl,
+  playlistName,
+  playlistCover = "",
+  sourceTrackCount = songs.length,
+  gameMode = "spotify_playlist"
+}) {
   const room = ensureRoom(code);
   ensureHost(room, playerId);
 
   room.songPool = shuffle(songs.map(sanitizeSong));
   room.settings = {
     ...room.settings,
-    gameMode: "spotify_playlist",
+    gameMode,
     playlistUrl,
     playlistName,
+    playlistCover,
+    sourceTrackCount,
     importedCount: room.songPool.length
   };
 
@@ -306,6 +416,10 @@ export function startGame({ code, playerId }) {
   const room = ensureRoom(code);
   ensureHost(room, playerId);
 
+  if (!room.players.filter((player) => player.connected).every((player) => player.ready)) {
+    throw new Error("Everyone in the room needs to be ready before you start.");
+  }
+
   if (room.songPool.length < 4) {
     throw new Error("Need at least 4 playable songs before starting the game.");
   }
@@ -313,6 +427,15 @@ export function startGame({ code, playerId }) {
   room.players.forEach((player) => {
     player.score = 0;
     player.lastAnswerAt = null;
+    player.ready = false;
+    player.stats = {
+      answersSubmitted: 0,
+      correctAnswers: 0,
+      fastestAnswers: 0,
+      totalResponseMs: 0,
+      currentStreak: 0,
+      bestStreak: 0
+    };
   });
 
   room.phase = "playing";
@@ -356,6 +479,7 @@ export function submitAnswer({ code, playerId, optionId }) {
       submittedAt: Date.now()
     });
     player.lastAnswerAt = Date.now();
+    player.stats.answersSubmitted += 1;
   }
 
   return room;
@@ -370,16 +494,43 @@ export function revealRound(code) {
   }
 
   room.phase = "reveal";
+  const scoreChanges = {};
+  const correctAnswers = room.players
+    .map((player) => ({
+      player,
+      answer: round.answers.get(player.id)
+    }))
+    .filter((entry) => entry.answer && entry.answer.optionId === round.song.id)
+    .sort((a, b) => a.answer.submittedAt - b.answer.submittedAt);
+  const fastestCorrectPlayerId = correctAnswers[0]?.player.id || "";
 
   for (const player of room.players) {
     const answer = round.answers.get(player.id);
 
-    if (!answer || answer.optionId !== round.song.id) {
+    if (!answer) {
+      player.stats.currentStreak = 0;
+      scoreChanges[player.id] = 0;
+      continue;
+    }
+
+    player.stats.totalResponseMs += Math.max(0, answer.submittedAt - round.startAt);
+
+    if (answer.optionId !== round.song.id) {
+      player.stats.currentStreak = 0;
+      scoreChanges[player.id] = 0;
       continue;
     }
 
     const remainingTime = Math.max(0, Math.floor((round.endAt - answer.submittedAt) / 1000));
-    player.score += 100 + remainingTime * 10;
+    const points = 100 + remainingTime * 10;
+    player.score += points;
+    player.stats.correctAnswers += 1;
+    player.stats.currentStreak += 1;
+    player.stats.bestStreak = Math.max(player.stats.bestStreak, player.stats.currentStreak);
+    if (player.id === fastestCorrectPlayerId) {
+      player.stats.fastestAnswers += 1;
+    }
+    scoreChanges[player.id] = points;
   }
 
   const leaderboard = serializeRoom(room).leaderboard;
@@ -389,7 +540,9 @@ export function revealRound(code) {
     song: round.song,
     options: round.options,
     correctOptionId: round.song.id,
-    leaderboard
+    leaderboard,
+    scoreChanges,
+    fastestCorrectPlayerId
   };
 
   room.game.currentRoundData = null;
@@ -435,16 +588,12 @@ export function handleDisconnect(socketId) {
     }
 
     player.connected = false;
+    player.ready = false;
     affectedRoom = room;
+    room.emptySince = room.players.every((entry) => !entry.connected) ? Date.now() : null;
 
     if (room.hostId === player.id) {
-      const nextHost = room.players.find((entry) => entry.id !== player.id && entry.connected);
-
-      if (nextHost) {
-        player.isHost = false;
-        nextHost.isHost = true;
-        room.hostId = nextHost.id;
-      }
+      room.hostReconnectGraceUntil = Date.now() + HOST_RECONNECT_GRACE_MS;
     }
 
     break;
@@ -453,7 +602,35 @@ export function handleDisconnect(socketId) {
   return affectedRoom;
 }
 
+export function leaveRoom({ code, playerId, socketId }) {
+  const room = ensureRoom(code);
+  const player = room.players.find(
+    (entry) => entry.id === playerId || (socketId && entry.socketId === socketId)
+  );
+
+  if (!player) {
+    return room;
+  }
+
+  player.connected = false;
+  player.socketId = "";
+  player.ready = false;
+  room.emptySince = room.players.every((entry) => !entry.connected) ? Date.now() : null;
+
+  if (room.hostId === player.id) {
+    room.hostReconnectGraceUntil = Date.now() + HOST_RECONNECT_GRACE_MS;
+  }
+
+  return room;
+}
+
 export function removeEmptyRooms() {
+  for (const [code, room] of rooms.entries()) {
+    if (room.emptySince && Date.now() - room.emptySince > EMPTY_ROOM_TTL_MS) {
+      rooms.delete(code);
+    }
+  }
+
   return rooms;
 }
 

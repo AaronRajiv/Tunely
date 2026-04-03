@@ -1,5 +1,6 @@
 const SPOTIFY_API_BASE = "https://api.spotify.com/v1";
 const ITUNES_SEARCH_BASE = "https://itunes.apple.com/search";
+const APPLE_RSS_BASE = "https://rss.applemarketingtools.com/api/v2";
 const SPOTIFY_MARKET = process.env.SPOTIFY_MARKET || "IN";
 const SPOTIFY_SCOPES = [
   "playlist-read-private",
@@ -9,6 +10,35 @@ const SPOTIFY_SCOPES = [
 let tokenCache = {
   accessToken: null,
   expiresAt: 0
+};
+const importCache = new Map();
+
+const APPLE_CURATED_PRESETS = {
+  india: {
+    key: "india",
+    label: "Top 100: India",
+    country: "in"
+  },
+  usa: {
+    key: "usa",
+    label: "Top 100: USA",
+    country: "us"
+  },
+  uk: {
+    key: "uk",
+    label: "Top 100: UK",
+    country: "gb"
+  },
+  canada: {
+    key: "canada",
+    label: "Top 100: Canada",
+    country: "ca"
+  },
+  australia: {
+    key: "australia",
+    label: "Top 100: Australia",
+    country: "au"
+  }
 };
 
 function extractPlaylistId(playlistUrl) {
@@ -23,6 +53,30 @@ function extractPlaylistId(playlistUrl) {
   }
 
   throw new Error("Invalid Spotify playlist URL.");
+}
+
+function normalizeCuratedQuery(query) {
+  const normalized = (query || "").trim().toLowerCase();
+
+  if (!normalized) {
+    throw new Error("Enter an Apple curated chart name like India or USA.");
+  }
+
+  const direct = APPLE_CURATED_PRESETS[normalized];
+
+  if (direct) {
+    return direct;
+  }
+
+  const fuzzy = Object.values(APPLE_CURATED_PRESETS).find((preset) =>
+    preset.label.toLowerCase().includes(normalized)
+  );
+
+  if (fuzzy) {
+    return fuzzy;
+  }
+
+  throw new Error("Apple curated playlist not found. Try India, USA, UK, Canada, or Australia.");
 }
 
 async function getSpotifyToken() {
@@ -194,6 +248,11 @@ async function spotifyGet(pathname, searchParams = {}, userTokens = null) {
 
   if (!response.ok) {
     const errorText = await response.text();
+    if (response.status === 403 && pathname.includes("/playlists/")) {
+      throw new Error(
+        "Spotify blocked this playlist for the current app session. Try a playlist you own, duplicate it into your account, or re-import one that already worked."
+      );
+    }
     throw new Error(`Spotify request failed (${response.status}) for ${pathname}: ${errorText}`);
   }
 
@@ -340,10 +399,41 @@ async function enrichAppleLinks(songs) {
   );
 }
 
+async function fetchAppleCuratedFeed(preset) {
+  const url = `${APPLE_RSS_BASE}/${preset.country}/music/most-played/100/songs.json`;
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error(`Apple curated feed request failed (${response.status}) for ${preset.label}.`);
+  }
+
+  const data = await response.json();
+
+  return (data.feed?.results || []).map((entry) => ({
+    id: entry.id,
+    title: entry.name,
+    artist: entry.artistName,
+    preview_url: "",
+    cover: entry.artworkUrl100?.replace("100x100bb", "512x512bb") || "",
+    apple_music_url: entry.url || "",
+    lyricSnippet: ""
+  }));
+}
+
 export async function importSpotifyPlaylist(playlistUrl, userTokens) {
+  const cacheKey = `spotify:${playlistUrl.trim()}`;
+  const cached = importCache.get(cacheKey);
+
+  if (cached) {
+    return {
+      ...cached,
+      tokens: userTokens
+    };
+  }
+
   const playlistId = extractPlaylistId(playlistUrl);
   const playlistResponse = await spotifyGet(`/playlists/${playlistId}`, {
-    fields: "name",
+    fields: "name,images",
     market: SPOTIFY_MARKET
   }, userTokens);
   const playlist = playlistResponse.data;
@@ -378,11 +468,55 @@ export async function importSpotifyPlaylist(playlistUrl, userTokens) {
     );
   }
 
-  return {
+  const imported = {
     playlistName: playlist.name,
+    playlistCover: playlist.images?.[0]?.url || playableTracks[0]?.cover || "",
     songs: playableTracks,
+    sourceTrackCount: spotifyTracks.length,
     tokens: trackResponse.tokens || playlistResponse.tokens || userTokens
   };
+
+  importCache.set(cacheKey, {
+    playlistName: imported.playlistName,
+    playlistCover: imported.playlistCover,
+    songs: imported.songs,
+    sourceTrackCount: imported.sourceTrackCount
+  });
+
+  return imported;
+}
+
+export async function importAppleCuratedPlaylist(query) {
+  const cacheKey = `apple_curated:${query.trim().toLowerCase()}`;
+  const cached = importCache.get(cacheKey);
+
+  if (cached) {
+    return cached;
+  }
+
+  const preset = normalizeCuratedQuery(query);
+  const feedSongs = await fetchAppleCuratedFeed(preset);
+  const playableTracks = (await enrichAppleLinks(feedSongs)).filter((track) => track.preview_url);
+
+  if (playableTracks.length < 4) {
+    throw new Error(`${preset.label} only has ${playableTracks.length} playable Apple previews right now.`);
+  }
+
+  const imported = {
+    playlistName: preset.label,
+    playlistCover: playableTracks[0]?.cover || "",
+    songs: playableTracks,
+    sourceTrackCount: feedSongs.length,
+    source: "apple_curated"
+  };
+
+  importCache.set(cacheKey, imported);
+
+  return imported;
+}
+
+export function listAppleCuratedPlaylists() {
+  return Object.values(APPLE_CURATED_PRESETS).map(({ key, label }) => ({ key, label }));
 }
 
 export async function fetchDefaultModeTracks(mode) {
