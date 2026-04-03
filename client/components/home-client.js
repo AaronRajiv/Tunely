@@ -12,11 +12,51 @@ export function HomeClient() {
   const [roomCode, setRoomCode] = useState("");
   const [error, setError] = useState("");
   const [isBusy, setIsBusy] = useState(false);
-  const patchNotes = [
-    "Live streak tracking now glows right inside the room leaderboard.",
-    "Players can ready up before the host starts, while the host stays auto-ready.",
-    "Round flow now has better waiting states, score bursts, and smoother reveals.",
-    "Playlist imports keep recent history and show matched track counts more clearly."
+  const releaseNotes = [
+    {
+      version: "Build 0.4",
+      label: "Latest",
+      title: "Room flow and live feedback polish",
+      updates: [
+        "Added player ready-up flow in the lobby while keeping the host auto-ready.",
+        "Leaderboard rows now show live answer state, score gain bursts, and active streaks.",
+        "Rooms stay alive through refreshes and short disconnects with a host reconnect grace period.",
+        "Session details now surface answer progress and clearer room status."
+      ]
+    },
+    {
+      version: "Build 0.3",
+      label: "Gameplay",
+      title: "Round pacing and reveal improvements",
+      updates: [
+        "Introduced a smoother pre-round intro so songs no longer start abruptly.",
+        "Rounds now end early as soon as every connected player has answered.",
+        "Reveal screens clearly mark correct and incorrect choices in the 2x2 answer layout.",
+        "Audio fade-out and steadier volume handling make each round feel cleaner."
+      ]
+    },
+    {
+      version: "Build 0.2",
+      label: "Lobby",
+      title: "Playlist import and lobby usability",
+      updates: [
+        "Spotify import now matches tracks to Apple preview audio for more reliable playback.",
+        "Import history remembers previous playlists and the input supports pressing Enter to import.",
+        "Playlist metadata now includes matched track counts, playlist naming, and artwork in the room header.",
+        "Room codes can be copied directly from the lobby with one click."
+      ]
+    },
+    {
+      version: "Build 0.1",
+      label: "Visual",
+      title: "Tunely identity and results refresh",
+      updates: [
+        "Reworked Tunely branding on the home page and room header.",
+        "Added generated round avatars, cleaner profile editing, and stronger room styling.",
+        "Final results now use a real podium layout with badges for standout players.",
+        "Home page includes a running patch log so the latest changes are easy to track."
+      ]
+    }
   ];
 
   useEffect(() => {
@@ -171,20 +211,31 @@ export function HomeClient() {
         <section className="panel p-6 md:p-8">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm uppercase tracking-[0.24em] text-white/45">Patch notes</p>
-              <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">Latest updates in Tunely</h2>
+              <p className="text-sm uppercase tracking-[0.24em] text-white/45">Release notes</p>
+              <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">Latest changes in Tunely</h2>
             </div>
-            <span className="pill">April 2026 build</span>
+            <span className="pill">Updated April 2026</span>
           </div>
 
-          <div className="mt-6 grid gap-3 md:grid-cols-2">
-            {patchNotes.map((note, index) => (
+          <div className="mt-6 grid gap-4 xl:grid-cols-2">
+            {releaseNotes.map((entry) => (
               <div
-                key={note}
-                className="rounded-[24px] border border-white/10 bg-black/20 px-5 py-4 text-white/75"
+                key={entry.version}
+                className="rounded-[24px] border border-white/10 bg-black/20 px-5 py-5 text-white/75"
               >
-                <p className="text-sm uppercase tracking-[0.24em] text-white/35">{`Update 0${index + 1}`}</p>
-                <p className="mt-3 text-base leading-7">{note}</p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm uppercase tracking-[0.24em] text-white/35">{entry.version}</p>
+                  <span className="pill !px-2.5 !py-1">{entry.label}</span>
+                </div>
+                <h3 className="mt-4 text-lg font-semibold text-white">{entry.title}</h3>
+                <div className="mt-4 space-y-3">
+                  {entry.updates.map((item) => (
+                    <div key={item} className="flex items-start gap-3">
+                      <span className="mt-2 h-2 w-2 rounded-full bg-white/45" />
+                      <p className="flex-1 text-sm leading-7 text-white/72">{item}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
