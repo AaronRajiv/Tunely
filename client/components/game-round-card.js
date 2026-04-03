@@ -20,8 +20,10 @@ export function GameRoundCard({
   const audioRef = useRef(null);
   const stopRef = useRef(null);
   const fadeRef = useRef(null);
+  const retryPlaybackRef = useRef(() => {});
   const [playbackState, setPlaybackState] = useState("waiting");
   const [introCountdown, setIntroCountdown] = useState(0);
+  const [isRoundLive, setIsRoundLive] = useState(false);
 
   const introLabel = useMemo(() => {
     if (introCountdown <= 0) {
@@ -39,20 +41,36 @@ export function GameRoundCard({
     const delay = Math.max(0, round.startAt - Date.now());
     setIntroCountdown(Math.max(0, Math.ceil(delay / 1000)));
     setPlaybackState("waiting");
+    setIsRoundLive(false);
 
     const countdownInterval = window.setInterval(() => {
-      const next = Math.max(0, Math.ceil((round.startAt - Date.now()) / 1000));
+      const nextDelay = round.startAt - Date.now();
+      const next = Math.max(0, Math.ceil(nextDelay / 1000));
       setIntroCountdown(next);
+      setIsRoundLive(nextDelay <= 0);
     }, 150);
 
-    const startTimer = setTimeout(() => {
-      const audio = new Audio(round.preview_url);
-      audio.volume = isMuted ? 0 : volume;
-      audioRef.current = audio;
+    const playAudio = () => {
+      const audio = audioRef.current;
+
+      if (!audio) {
+        return;
+      }
+
       audio.play().then(
         () => setPlaybackState("playing"),
         () => setPlaybackState("blocked")
       );
+    };
+    retryPlaybackRef.current = playAudio;
+
+    const startTimer = setTimeout(() => {
+      const audio = new Audio(round.preview_url);
+      audio.preload = "auto";
+      audio.volume = isMuted ? 0 : volume;
+      audioRef.current = audio;
+      setIsRoundLive(true);
+      playAudio();
 
       stopRef.current = setTimeout(() => {
         const steps = 8;
@@ -83,7 +101,23 @@ export function GameRoundCard({
         audioRef.current.currentTime = 0;
       }
     };
-  }, [round]);
+  }, [round, isMuted, volume]);
+
+  useEffect(() => {
+    const retryPlayback = () => {
+      if (playbackState === "blocked") {
+        retryPlaybackRef.current();
+      }
+    };
+
+    window.addEventListener("pointerdown", retryPlayback);
+    window.addEventListener("keydown", retryPlayback);
+
+    return () => {
+      window.removeEventListener("pointerdown", retryPlayback);
+      window.removeEventListener("keydown", retryPlayback);
+    };
+  }, [playbackState]);
 
   useEffect(() => {
     if (audioRef.current) {
@@ -149,7 +183,7 @@ export function GameRoundCard({
             <p className="text-sm text-white/55">Playback</p>
             <p className="mt-2 text-xl font-medium text-white">
               {playbackState === "blocked"
-                ? "Browser blocked autoplay. Tap an answer to keep going."
+                ? "Browser blocked autoplay. Tap anywhere to wake the preview."
                 : playbackState === "playing"
                   ? "Preview is playing now"
                   : playbackState === "stopped"
@@ -193,10 +227,12 @@ export function GameRoundCard({
               "min-h-[118px] rounded-[28px] border px-5 py-5 text-left transition duration-200",
               selectedOptionId === option.id
                 ? "border-white bg-white text-black shadow-glow"
-                : "border-white/10 bg-white/5 text-white hover:-translate-y-0.5 hover:bg-white/10"
+                : !isRoundLive
+                  ? "cursor-not-allowed border-white/8 bg-white/[0.04] text-white/35"
+                  : "border-white/10 bg-white/5 text-white hover:-translate-y-0.5 hover:bg-white/10"
             )}
             onClick={() => onSelect(option.id)}
-            disabled={Boolean(selectedOptionId)}
+            disabled={Boolean(selectedOptionId) || !isRoundLive}
           >
             <div className="text-sm text-white/45">{`0${index + 1}`.slice(-2)}</div>
             <div className="mt-4 text-xl font-semibold leading-8">{option.label}</div>

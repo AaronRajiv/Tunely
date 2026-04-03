@@ -400,9 +400,19 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("submit_answer", ({ roomCode, playerId, optionId }) => {
+  socket.on("submit_answer", ({ roomCode, playerId, optionId }, acknowledge) => {
     try {
-      submitAnswer({ code: roomCode, playerId, optionId });
+      const result = submitAnswer({ code: roomCode, playerId, optionId });
+
+      acknowledge?.({
+        accepted: result.accepted,
+        reason: result.reason || ""
+      });
+
+      if (!result.accepted) {
+        return;
+      }
+
       emitRoomUpdate(roomCode);
 
       if (haveAllConnectedPlayersAnswered(roomCode)) {

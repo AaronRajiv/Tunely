@@ -225,12 +225,21 @@ export function RoomClient({ code }) {
       return;
     }
 
-    setSelectedOptionId(optionId);
-    selectedOptionRef.current = optionId;
     socket.emit("submit_answer", {
       roomCode: code,
       playerId: currentPlayerId,
       optionId
+    }, ({ accepted, reason }) => {
+      if (!accepted) {
+        if (reason) {
+          setError(reason);
+        }
+        return;
+      }
+
+      setError("");
+      setSelectedOptionId(optionId);
+      selectedOptionRef.current = optionId;
     });
   }
 
@@ -364,8 +373,10 @@ export function RoomClient({ code }) {
                     key={player.id}
                     className={
                       room.phase === "lobby" && player.ready
-                        ? "flex items-center justify-between rounded-[24px] border border-sky-300/35 bg-gradient-to-r from-sky-400/18 via-cyan-300/10 to-white/5 px-4 py-3 shadow-[0_0_32px_rgba(56,189,248,0.12)]"
-                        : "flex items-center justify-between rounded-[24px] border border-white/8 bg-gradient-to-r from-white/10 to-white/5 px-4 py-3"
+                        ? "flex items-center justify-between rounded-[24px] border border-sky-300/45 bg-gradient-to-r from-sky-400/24 via-cyan-300/14 to-white/5 px-4 py-3 shadow-[0_0_42px_rgba(56,189,248,0.18)]"
+                        : room.phase === "lobby"
+                          ? "flex items-center justify-between rounded-[24px] border border-white/10 bg-gradient-to-r from-white/8 to-white/5 px-4 py-3"
+                          : "flex items-center justify-between rounded-[24px] border border-white/8 bg-gradient-to-r from-white/10 to-white/5 px-4 py-3"
                     }
                   >
                     <div className="flex items-center gap-3">
@@ -422,7 +433,7 @@ export function RoomClient({ code }) {
                     onClick={() => updateReadyState(!me?.ready)}
                     type="button"
                   >
-                    {me?.ready ? "Ready to play" : "Mark ready"}
+                    {me?.ready ? "Ready" : "Not ready"}
                   </button>
                 </div>
               )

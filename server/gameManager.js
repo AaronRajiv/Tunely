@@ -466,11 +466,27 @@ export function submitAnswer({ code, playerId, optionId }) {
   const round = room.game.currentRoundData;
 
   if (!round) {
-    throw new Error("No round is active.");
+    return {
+      room,
+      accepted: false,
+      reason: "No round is active."
+    };
   }
 
   if (Date.now() < round.startAt || Date.now() > round.endAt) {
-    return room;
+    return {
+      room,
+      accepted: false,
+      reason: "Wait for the round countdown to finish."
+    };
+  }
+
+  if (round.answers.has(playerId)) {
+    return {
+      room,
+      accepted: false,
+      reason: "Answer already locked."
+    };
   }
 
   if (!round.answers.has(playerId)) {
@@ -482,7 +498,11 @@ export function submitAnswer({ code, playerId, optionId }) {
     player.stats.answersSubmitted += 1;
   }
 
-  return room;
+  return {
+    room,
+    accepted: true,
+    submittedAt: player.lastAnswerAt
+  };
 }
 
 export function revealRound(code) {

@@ -12,6 +12,7 @@ export function HomeClient() {
   const [roomCode, setRoomCode] = useState("");
   const [error, setError] = useState("");
   const [isBusy, setIsBusy] = useState(false);
+  const [joinFallback, setJoinFallback] = useState(null);
   const releaseNotes = [
     {
       version: "Build 0.4",
@@ -68,18 +69,30 @@ export function HomeClient() {
 
     const handleCreated = ({ room, playerId }) => {
       window.localStorage.setItem("sgp_player_id", playerId);
+      if (joinFallback) {
+        window.clearTimeout(joinFallback);
+        setJoinFallback(null);
+      }
       setIsBusy(false);
       router.push(`/room/${room.code}`);
     };
 
     const handleJoined = ({ room, playerId }) => {
       window.localStorage.setItem("sgp_player_id", playerId);
+      if (joinFallback) {
+        window.clearTimeout(joinFallback);
+        setJoinFallback(null);
+      }
       setIsBusy(false);
       router.push(`/room/${room.code}`);
     };
 
     const handleError = ({ message }) => {
-      setError(message);
+      if (joinFallback) {
+        window.clearTimeout(joinFallback);
+        setJoinFallback(null);
+      }
+      setError(message === "Room not found." ? "Invalid room code." : message);
       setIsBusy(false);
     };
 
@@ -92,7 +105,7 @@ export function HomeClient() {
       socket.off("room_joined", handleJoined);
       socket.off("error_message", handleError);
     };
-  }, [router]);
+  }, [joinFallback, router]);
 
   function persistName() {
     const safeName = name.trim() || "Guest";
@@ -117,6 +130,10 @@ export function HomeClient() {
   function handleJoinRoom() {
     setError("");
     setIsBusy(true);
+    if (joinFallback) {
+      window.clearTimeout(joinFallback);
+      setJoinFallback(null);
+    }
 
     const socket = getSocket();
     const safeName = persistName();
@@ -127,6 +144,13 @@ export function HomeClient() {
       playerId: getPlayerId(),
       avatarSeed: getAvatarSeed()
     });
+
+    const timeoutId = window.setTimeout(() => {
+      setError("Invalid room code.");
+      setIsBusy(false);
+    }, 2500);
+
+    setJoinFallback(timeoutId);
   }
 
   return (
